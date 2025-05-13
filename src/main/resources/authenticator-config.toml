@@ -1,0 +1,36 @@
+[mosip_auth]
+timestamp_format = "%Y-%m-%dT%H:%M:%S"
+ida_auth_version = '1.0'
+ida_auth_request_demo_id = 'mosip.identity.auth'
+ida_auth_request_kyc_id = 'mosip.identity.kyc'
+ida_auth_request_otp_id = 'mosip.identity.otp'
+ida_auth_env = 'Staging'
+authorization_header_constant = ''
+#partner_apikey = ""
+#partner_misp_lk = ""
+#partner_id = ""
+
+[mosip_auth_server]
+ida_auth_domain_uri = ''
+ida_auth_url = ''
+
+
+[crypto_encrypt]
+symmetric_key_size = 256
+symmetric_nonce_size = 128
+symmetric_gcm_tag_size = 128
+# certificate from the below path is used to encrypt the Auth Request.
+encrypt_cert_path = ""
+# used to decrypt the received response
+decrypt_p12_file_path = ""
+decrypt_p12_file_password = ""
+
+[crypto_signature]
+algorithm = 'RS256'
+sign_p12_file_path =  ''
+sign_p12_file_password = ''
+
+[logging]
+log_file_path = '/tmp/authenticator.log'
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+loglevel = "DEBUG" # can be one of "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"
