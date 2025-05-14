@@ -14,13 +14,13 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.FileInputStream;
-import java.security.KeyStore;
-import java.security.MessageDigest;
-import java.security.PrivateKey;
+import java.security.*;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
@@ -45,56 +45,34 @@ public class CryptoUtil {
         this.encryptPublicKey = (RSAPublicKey) getCertificateObj(encryptConfig.getEncrypt_cert_path(), logger).getPublicKey();
 
         // Load decryption private key
-        KeyStore decryptKeyStore = loadKeyStore(encryptConfig.getDecrypt_p12_file_path(), encryptConfig.getDecrypt_p12_file_password());
-        this.decryptPrivateKey = (RSAPrivateKey) decryptKeyStore.getKey("key", encryptConfig.getDecrypt_p12_file_password().toCharArray());
+        Object[] decryptKeyStoreData = getPrivateKeyAndCertificate(
+                encryptConfig.getDecrypt_p12_file_path(),
+                encryptConfig.getDecrypt_p12_file_password(),
+                this.logger
+        );
+        this.decryptPrivateKey = (RSAPrivateKey) decryptKeyStoreData[0];
 
-        // Load signing private key and certificate
-        KeyStore signKeyStore = loadKeyStore(signConfig.getSign_p12_file_path(), signConfig.getSign_p12_file_password());
-        String alias = "mosip"; // Replace with the correct alias if different
-        char[] password = signConfig.getSign_p12_file_password().toCharArray();
+        Object[] signKeyStoreData = getPrivateKeyAndCertificate(
+                signConfig.getSign_p12_file_path(),
+                signConfig.getSign_p12_file_password(),
+                this.logger
+        );
+        this.signPrivateKey = (RSAPrivateKey) signKeyStoreData[0];
+        this.signCert = (X509Certificate) signKeyStoreData[1];
 
-        try {
-            PrivateKey privateKey = (PrivateKey) signKeyStore.getKey(alias, password);
+        // Initialize signPrivKeyJws
+        this.signPrivKeyJws = CryptoUtil.getJwkPrivateKey(this.signPrivateKey, signConfig.getSign_p12_file_password(), this.logger);
 
-            if (privateKey == null) {
-                logger.error("Private key is null. Check the alias and password.");
-                logger.error("Keystore alias: " + alias);
-                logger.error("Keystore password: " + signConfig.getSign_p12_file_password()); // Log the password
-                throw new Exception("Private key not found in keystore");
-            }
+        // Symmetric encryption parameters
+        this.symmetricKeySize = encryptConfig.getSymmetric_key_size();
+        this.symmetricNonceSize = encryptConfig.getSymmetric_nonce_size() / 8;
+        this.symmetricGcmTagSize = encryptConfig.getSymmetric_gcm_tag_size() / 8;
 
-            this.signPrivateKey = (RSAPrivateKey) privateKey;
-            this.signCert = (X509Certificate) signKeyStore.getCertificate(alias);
+        // Calculate the thumbprint of the encryption certificate
+        this.encCertThumbprint = calculateEncCertThumbprint(encryptConfig.getEncrypt_cert_path());
 
-            // Initialize signPrivKeyJws
-            this.signPrivKeyJws = CryptoUtil.getJwkPrivateKey(this.signPrivateKey, signConfig.getSign_p12_file_password(), this.logger);
-
-            // Symmetric encryption parameters
-            this.symmetricKeySize = encryptConfig.getSymmetric_key_size();
-            this.symmetricNonceSize = encryptConfig.getSymmetric_nonce_size() / 8;
-            this.symmetricGcmTagSize = encryptConfig.getSymmetric_gcm_tag_size() / 8;
-
-            // Calculate the thumbprint of the encryption certificate
-            this.encCertThumbprint = calculateEncCertThumbprint(encryptConfig.getEncrypt_cert_path());
-
-            // Signing algorithm
-            this.algorithm = signConfig.getAlgorithm();
-        } catch (Exception e) {
-            logger.error("Error loading signing key: " + e.getMessage(), e);
-            throw e;
-        }
-    }
-
-    private static KeyStore loadKeyStore(String p12FilePath, String p12FilePassword) throws Exception {
-        try (FileInputStream fis = new FileInputStream(p12FilePath)) {
-            KeyStore keyStore = KeyStore.getInstance("PKCS12");
-            keyStore.load(fis, p12FilePassword.toCharArray());
-            System.out.println("Keystore loaded successfully from: " + p12FilePath);
-            return keyStore;
-        } catch (Exception e) {
-            System.err.println("Failed to load keystore. Path: " + p12FilePath + ", Error: " + e.getMessage());
-            throw e;
-        }
+        // Signing algorithm
+        this.algorithm = signConfig.getAlgorithm();
     }
 
     private static X509Certificate getCertificateObj(String certPath, Logger logger) throws AuthenticatorCryptoException {
@@ -108,28 +86,59 @@ public class CryptoUtil {
         }
     }
 
-    private String calculateEncCertThumbprint(String certPath) throws Exception {
-        X509Certificate certificate = getCertificateObj(certPath, logger);
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] fingerprint = digest.digest(certificate.getEncoded());
-        return Base64.encodeBase64URLSafeString(fingerprint);
+    public static Object[] getPrivateKeyAndCertificate(String p12FilePath, String p12FilePassword, Logger logger) throws AuthenticatorCryptoException {
+        logger.info("Reading P12 file. File Path: {}", p12FilePath);
+        try (FileInputStream fis = new FileInputStream(p12FilePath)) {
+            KeyStore keyStore = KeyStore.getInstance("PKCS12");
+            keyStore.load(fis, p12FilePassword.toCharArray());
+
+            String alias = keyStore.aliases().nextElement();
+            PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, p12FilePassword.toCharArray());
+            Certificate certificate = keyStore.getCertificate(alias);
+
+            return new Object[]{privateKey, certificate};
+        } catch (Exception e) {
+            logger.error("Error Loading P12 file to create objects. Error: {}", e.getMessage(), e);
+            throw new AuthenticatorCryptoException(
+                    Errors.AUT_CRY_002.name(),
+                    Errors.AUT_CRY_002.getMessage(p12FilePath)
+            );
+        }
     }
 
-    public String getEncCertThumbprint() {
-        return encCertThumbprint;
+    private String calculateEncCertThumbprint(String certPath) throws AuthenticatorCryptoException {
+        logger.info("Calculating thumbprint for certificate: {}", certPath);
+        try (FileInputStream fis = new FileInputStream(certPath)) {
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) certFactory.generateCertificate(fis);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encodedCert = digest.digest(cert.getEncoded());
+            return Base64.encodeBase64String(encodedCert);
+        } catch (Exception e) {
+            logger.error("Error calculating thumbprint for certificate: {}", certPath, e);
+            throw new AuthenticatorCryptoException(
+                    Errors.AUT_CRY_001.name(),
+                    Errors.AUT_CRY_001.getMessage(certPath)
+            );
+        }
     }
 
     public static JWK getJwkPrivateKey(PrivateKey privateKey, String keyPassword, Logger logger) throws Exception {
         logger.info("Creating JWK key for JWS signing.");
-        try {
-            String privateKeyPem = "-----BEGIN PRIVATE KEY-----\n" +
-                    java.util.Base64.getEncoder().encodeToString(privateKey.getEncoded()) +
-                    "\n-----END PRIVATE KEY-----\n";
-            return JWK.parseFromPEMEncodedObjects(privateKeyPem);
-        } catch (Exception e) {
-            logger.error("Error creating JWK key: " + e.getMessage());
-            throw e;
-        }
+
+        // Convert the private key to PKCS#8 format
+        byte[] privateKeyBytes = privateKey.getEncoded();
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        PrivateKey pkcs8PrivateKey = keyFactory.generatePrivate(keySpec);
+
+        // Convert the private key to PEM format
+        String privateKeyPem = "-----BEGIN PRIVATE KEY-----\n" +
+                java.util.Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(pkcs8PrivateKey.getEncoded()) +
+                "\n-----END PRIVATE KEY-----";
+
+        // Create the JWK object
+        return JWK.parseFromPEMEncodedObjects(privateKeyPem);
     }
 
 
@@ -233,34 +242,40 @@ public class CryptoUtil {
     public String[] encryptAuthData(byte[] authData) throws Exception {
         logger.info("Request for Auth Data Encryption.");
 
-        try {
-            // Generate a random AES Key
-            byte[] aesKey = new byte[symmetricKeySize / 8];
-            new java.security.SecureRandom().nextBytes(aesKey);
+        if (authData == null || authData.length == 0) {
+            throw new IllegalArgumentException("Auth data cannot be null or empty");
+        }
 
-            // Encrypt Auth Request Data using the generated random key
+        try {
+            // Generate a random AES key
+            byte[] aesKey = new byte[symmetricKeySize / 8];
+            SecureRandom secureRandom = new SecureRandom();
+            secureRandom.nextBytes(aesKey);
+
+            // Encrypt the auth data using the AES key
             byte[] encryptedAuthData = symmetricEncrypt(authData, aesKey);
-            String encryptedAuthDataB64 = Base64.encodeBase64URLSafeString(encryptedAuthData);
+            String encryptedAuthB64Data = Base64.encodeBase64URLSafeString(encryptedAuthData);
             logger.info("Generating AES Key and encrypting Auth Data Completed.");
 
-            // Encrypt the random generated key using the IDA partner certificate
+            // Encrypt the AES key using the partner's public key
             byte[] encryptedAesKey = asymmetricEncrypt(aesKey);
             String encryptedAesKeyB64 = Base64.encodeBase64URLSafeString(encryptedAesKey);
             logger.info("Encrypting Random AES Key Completed.");
 
-            // Generate SHA-256 hash for the Auth Request Data
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] authDataHash = digest.digest(authData);
+            // Generate SHA-256 hash of the auth data
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            byte[] authDataHash = sha256.digest(authData);
+            byte[] encAuthDataHash = symmetricEncrypt(authDataHash, aesKey);
+            String encAuthDataHashB64 = Base64.encodeBase64URLSafeString(encAuthDataHash);
+            logger.info("Generation of SHA256 Hash for the Auth Data completed.");
 
-            // Encrypt the SHA-256 hash using the AES key
-            byte[] encryptedAuthDataHash = symmetricEncrypt(authDataHash, aesKey);
-            String encryptedAuthDataHashB64 = Base64.encodeBase64URLSafeString(encryptedAuthDataHash);
-            logger.info("Generation of SHA-256 Hash for the Auth Data completed.");
-
-            return new String[]{encryptedAuthDataB64, encryptedAesKeyB64, encryptedAuthDataHashB64};
+            return new String[] { encryptedAuthB64Data, encryptedAesKeyB64, encAuthDataHashB64 };
         } catch (Exception e) {
-            logger.error("Error encrypting Auth Data. Error Message: " + e.getMessage(), e);
-            throw new AuthenticatorCryptoException(Errors.AUT_CRY_003.name(), Errors.AUT_CRY_003.getMessage());
+            logger.error("Error encrypting Auth Data. Error Message: {}", e.getMessage(), e);
+            throw new AuthenticatorCryptoException(
+                    Errors.AUT_CRY_003.name(),
+                    Errors.AUT_CRY_003.getMessage()
+            );
         }
     }
 
@@ -269,12 +284,8 @@ public class CryptoUtil {
         try {
             // Create JWS Header with algorithm and x5c (certificate chain)
             JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
-                    .customParam("x5c", Collections.singletonList(
-                            Base64.encodeBase64String(signCert.getEncoded())
-                    ))
-                    .customParam("kid", Base64.encodeBase64String(
-                            MessageDigest.getInstance("SHA-256").digest(signCert.getEncoded())
-                    ))
+                    .x509CertChain(Collections.singletonList(Base64URL.encode(signCert.getEncoded())))
+                    .keyID(Base64.encodeBase64URLSafeString(signCert.getEncoded()))
                     .build();
 
             // Create JWS Object
@@ -289,8 +300,15 @@ public class CryptoUtil {
             logger.info("Generation for JWS Signature completed.");
             return jwsParts[0] + ".." + jwsParts[2];
         } catch (Exception e) {
-            logger.error("Error Signing Auth Data. Error Message: " + e.getMessage(), e);
-            throw new AuthenticatorCryptoException(Errors.AUT_CRY_004.name(), Errors.AUT_CRY_004.getMessage());
+            logger.error("Error Signing Auth Data. Error Message: {}", e.getMessage(), e);
+            throw new AuthenticatorCryptoException(
+                    Errors.AUT_CRY_004.name(),
+                    Errors.AUT_CRY_004.getMessage()
+            );
         }
+    }
+
+    public String getEncCertThumbprint() {
+        return this.encCertThumbprint;
     }
 }
