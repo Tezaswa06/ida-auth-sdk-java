@@ -1,27 +1,33 @@
-package auth.sdk.java.examples;
+package examples;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import auth.sdk.java.authenticator.Authenticator;
+import auth.sdk.java.models.DemographicsModel;
+import auth.sdk.java.models.BiometricModel;
 import auth.sdk.java.utils.ConfigLoader;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 
-public class OtpGenerate {
+public class OtpVerify {
     public static void main(String[] args) {
         try {
             // Load configuration
             ConfigLoader configLoader = new ConfigLoader();
             Authenticator authenticator = new Authenticator(configLoader.loadConfig(), null);
 
-            // Perform OTP generation
-            Map<String, Object> response = authenticator.genOtp(
-                    "4370296312658178", // individual_id
-                    "VID",              // individual_id_type
-                    "1234567890",       // txnId
-                    true,               // email
-                    true                // phone
+            // Perform KYC authentication with optional parameters
+            Map<String, Object> response = authenticator.kyc(
+                    "8300715076",         // txnId
+                    "2078529341",         // individualId
+                    "UIN",                // individualIdType
+                    Optional.empty(),     // demographicData (optional)
+                    Optional.empty(),     // otpValue (optional)
+                    Optional.empty(),     // biometrics (optional)
+                    true                  // consent
             );
 
             // Convert response to JsonNode for easier processing
@@ -36,9 +42,12 @@ public class OtpGenerate {
                 System.exit(1);
             }
 
-            // Print response
+            // Print response status
             System.out.println("Response status: 200");
-            System.out.println("Response body: " + responseNode.toPrettyString());
+
+            // Decrypt and print the response
+            Map<String, Object> decryptedResponse = authenticator.decryptResponse(response);
+            System.out.println("Decrypted response: " + mapper.writeValueAsString(decryptedResponse));
 
         } catch (IOException e) {
             e.printStackTrace();

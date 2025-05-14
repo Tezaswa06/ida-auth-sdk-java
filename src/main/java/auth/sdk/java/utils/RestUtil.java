@@ -79,6 +79,10 @@ public class RestUtil {
         }
 
         ObjectMapper mapper = new ObjectMapper();
+        System.out.println("POST URL: " + serverUrl);
+        System.out.println("Payload: " + data);
+        System.out.println("Headers: " + additionalHeaders);
+
         return mapper.readValue(conn.getInputStream(), Map.class);
     }
 }
