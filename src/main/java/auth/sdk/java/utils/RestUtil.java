@@ -1,11 +1,23 @@
 package auth.sdk.java.utils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.slf4j.Logger;
 
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class RestUtil {
@@ -15,10 +27,9 @@ public class RestUtil {
 
     public RestUtil(String authServerUrl, String authorizationHeaderConstant, Logger logger) {
         this.authServerUrl = authServerUrl;
-        this.requestHeaders = Map.of(
-                "Authorization", authorizationHeaderConstant,
-                "Content-Type", "application/json"
-        );
+        this.requestHeaders = new HashMap<>(); // Use a mutable map
+        this.requestHeaders.put("Authorization", authorizationHeaderConstant);
+        this.requestHeaders.put("Content-Type", "application/json");
         this.logger = logger;
     }
 
@@ -46,43 +57,46 @@ public class RestUtil {
         return mapper.readValue(conn.getInputStream(), Map.class);
     }
 
-    public Map<String, Object> postRequest(String pathParams, Map<String, String> additionalHeaders, byte[] data, Map<String, String> cookies) throws Exception {
-        String serverUrl = authServerUrl;
-        if (pathParams != null) {
-            if (!serverUrl.endsWith("/")) {
-                serverUrl += "/";
+
+    public Map<String, Object> postRequest(String pathParams, Map<String, String> headers, byte[] body, String token) throws Exception {
+        String url = authServerUrl + (pathParams != null ? "/" + pathParams : "");
+        logger.info("POST Request URL: " + url);
+
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            HttpPost httpPost = new HttpPost(url);
+
+            // Set headers
+            if (headers != null) {
+                headers.forEach(httpPost::addHeader);
             }
-            serverUrl += pathParams;
-        }
+            if (token != null && !token.isEmpty()) {
+                httpPost.addHeader("Authorization", "Bearer " + token);
+            }
 
-        HttpURLConnection conn = (HttpURLConnection) new URL(serverUrl).openConnection();
-        conn.setRequestMethod("POST");
-        conn.setDoOutput(true);
+            // Log headers
+            logger.debug("Request Headers: " + headers);
 
-        // Merge headers
-        requestHeaders.forEach(conn::setRequestProperty);
-        if (additionalHeaders != null) {
-            additionalHeaders.forEach(conn::setRequestProperty);
-        }
+            // Set body
+            if (body != null) {
+                httpPost.setEntity(new ByteArrayEntity(body, null));
+            }
 
-        if (cookies != null) {
-            conn.setRequestProperty("Cookie", String.join("; ", cookies.values()));
-        }
+            System.out.println("POST URL: " + url);
+            System.out.println("Payload: " + new String(body, StandardCharsets.UTF_8));
+            System.out.println("Headers: " + headers);
 
-        logger.info("Got <POST> Request for URL: {}", serverUrl);
-        logger.debug("Request Headers: {}", conn.getRequestProperties());
+            // Execute request
+            try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
+                int statusCode = response.getCode();
+                String responseString = new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8);
 
-        if (data != null) {
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(data);
+                logger.info("Response Status: " + statusCode);
+                logger.info("Response Body: " + responseString);
+
+                // Convert response to Map
+                ObjectMapper objectMapper = new ObjectMapper();
+                return objectMapper.readValue(responseString, Map.class);
             }
         }
-
-        ObjectMapper mapper = new ObjectMapper();
-        System.out.println("POST URL: " + serverUrl);
-        System.out.println("Payload: " + data);
-        System.out.println("Headers: " + additionalHeaders);
-
-        return mapper.readValue(conn.getInputStream(), Map.class);
-    }
+        }
 }

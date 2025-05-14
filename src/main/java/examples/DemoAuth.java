@@ -17,8 +17,8 @@ public class DemoAuth {
 
             // Perform authentication
             Map<String, Object> response = authenticator.auth(
-                    "4370296312658178", // individualId
-                    "VID",              // individualIdType
+                    "8536475201", // individualId
+                    "UIN",              // individualIdType
                     null,               // demographicData
                     Optional.empty(),   // txnId
                     Optional.empty(),   // otpValue
