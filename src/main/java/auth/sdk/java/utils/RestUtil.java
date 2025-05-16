@@ -1,102 +1,113 @@
 package auth.sdk.java.utils;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.hc.client5.http.classic.methods.HttpPost;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.slf4j.Logger;
-
 import java.io.OutputStream;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class RestUtil {
     private final String authServerUrl;
-    private final Map<String, String> requestHeaders;
     private final Logger logger;
+    private final Map<String, String> requestHeaders;
 
     public RestUtil(String authServerUrl, String authorizationHeaderConstant, Logger logger) {
         this.authServerUrl = authServerUrl;
-        this.requestHeaders = new HashMap<>(); // Use a mutable map
+        this.logger = logger;
+        this.requestHeaders = new java.util.HashMap<>();
         this.requestHeaders.put("Authorization", authorizationHeaderConstant);
         this.requestHeaders.put("Content-Type", "application/json");
-        this.logger = logger;
     }
 
-    public Map<String, Object> getRequest(String pathParams, Map<String, String> headers, byte[] data, Map<String, String> cookies) throws Exception {
-        String serverUrl = authServerUrl;
-        if (pathParams != null) {
+    public HttpURLConnection getRequest(String pathParams, Map<String, String> headers, String data, Map<String, String> cookies) throws Exception {
+        String serverUrl = this.authServerUrl;
+        if (pathParams != null && !pathParams.isEmpty()) {
             serverUrl += pathParams;
         }
-        logger.info("Got <GET> Request for URL and Path Params: {}", serverUrl);
 
-        HttpURLConnection conn = (HttpURLConnection) new URL(serverUrl).openConnection();
-        conn.setRequestMethod("GET");
-        headers.forEach(conn::setRequestProperty);
-        if (data != null) {
-            conn.setDoOutput(true);
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(data);
+        logger.info("Got <GET> Request for URL and Path Params: " + serverUrl);
+
+        URL url = new URL(serverUrl);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("GET");
+
+        // Add headers
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                connection.setRequestProperty(entry.getKey(), entry.getValue());
             }
         }
-        if (cookies != null) {
-            conn.setRequestProperty("Cookie", String.join("; ", cookies.values()));
+
+        // Add cookies
+        if (cookies != null && !cookies.isEmpty()) {
+            StringBuilder cookieBuilder = new StringBuilder();
+            for (Map.Entry<String, String> entry : cookies.entrySet()) {
+                cookieBuilder.append(entry.getKey()).append("=").append(entry.getValue()).append("; ");
+            }
+            connection.setRequestProperty("Cookie", cookieBuilder.toString());
         }
 
-        ObjectMapper mapper = new ObjectMapper();
-        return mapper.readValue(conn.getInputStream(), Map.class);
+        // Send data if provided (Note: uncommon for GET)
+        if (data != null) {
+            connection.setDoOutput(true);
+            try (OutputStream os = connection.getOutputStream()) {
+                os.write(data.getBytes());
+                os.flush();
+            }
+        }
+
+        return connection;
     }
 
-
-    public Map<String, Object> postRequest(String pathParams, Map<String, String> headers, byte[] body, String token) throws Exception {
-        String url = authServerUrl + (pathParams != null ? "/" + pathParams : "");
-        logger.info("POST Request URL: " + url);
-
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
-            HttpPost httpPost = new HttpPost(url);
-
-            // Set headers
-            if (headers != null) {
-                headers.forEach(httpPost::addHeader);
+    public HttpURLConnection postRequest(String pathParams, Map<String, String> additionalHeaders, String data, Map<String, String> cookies) throws Exception {
+        String serverUrl = this.authServerUrl;
+        if (pathParams != null && !pathParams.isEmpty()) {
+            if (!serverUrl.endsWith("/")) {
+                serverUrl += "/";
             }
-            if (token != null && !token.isEmpty()) {
-                httpPost.addHeader("Authorization", "Bearer " + token);
+            serverUrl += pathParams;
+        }
+
+        if (additionalHeaders != null) {
+            requestHeaders.putAll(additionalHeaders);
+        }
+
+        logger.info("Got <POST> Request for URL: " + this.authServerUrl);
+        logger.fine("Final request route = " + serverUrl);
+        logger.fine("Request Headers = " + requestHeaders);
+
+        URL url = new URL(serverUrl);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+
+        // Add headers
+        for (Map.Entry<String, String> entry : requestHeaders.entrySet()) {
+            connection.setRequestProperty(entry.getKey(), entry.getValue());
+        }
+
+        System.out.println("POST URL: " + url);
+        System.out.println("Payload: " + data);
+        System.out.println("Headers: " + connection.getRequestProperties());
+
+        // Add cookies
+        if (cookies != null && !cookies.isEmpty()) {
+            StringBuilder cookieBuilder = new StringBuilder();
+            for (Map.Entry<String, String> entry : cookies.entrySet()) {
+                cookieBuilder.append(entry.getKey()).append("=").append(entry.getValue()).append("; ");
             }
+            connection.setRequestProperty("Cookie", cookieBuilder.toString());
+        }
 
-            // Log headers
-            logger.debug("Request Headers: " + headers);
-
-            // Set body
-            if (body != null) {
-                httpPost.setEntity(new ByteArrayEntity(body, null));
-            }
-
-            System.out.println("POST URL: " + url);
-            System.out.println("Payload: " + new String(body, StandardCharsets.UTF_8));
-            System.out.println("Headers: " + headers);
-
-            // Execute request
-            try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
-                int statusCode = response.getCode();
-                String responseString = new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8);
-
-                logger.info("Response Status: " + statusCode);
-                logger.info("Response Body: " + responseString);
-
-                // Convert response to Map
-                ObjectMapper objectMapper = new ObjectMapper();
-                return objectMapper.readValue(responseString, Map.class);
+        // Add data (payload)
+        if (data != null) {
+            try (OutputStream os = connection.getOutputStream()) {
+                os.write(data.getBytes());
+                os.flush();
             }
         }
-        }
+
+        return connection;
+    }
 }

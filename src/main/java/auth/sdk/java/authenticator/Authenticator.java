@@ -7,9 +7,14 @@ import auth.sdk.java.utils.RestUtil;
 import auth.sdk.java.exceptions.AuthenticatorCryptoException;
 import auth.sdk.java.exceptions.AuthenticatorException;
 import auth.sdk.java.exceptions.Errors;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -19,6 +24,7 @@ import java.util.*;
 
 public class Authenticator {
     private final Logger logger;
+    private final java.util.logging.Logger julLogger;
     private final RestUtil authRestUtil;
     private final CryptoUtil cryptoUtil;
     private final String authDomainScheme;
@@ -32,12 +38,12 @@ public class Authenticator {
     private final String authorizationHeaderConstant;
 
     public Authenticator(Config config, Logger customLogger) throws Exception {
-        validateConfig(config);
         this.logger = customLogger != null ? customLogger : initLogger(config);
+        this.julLogger = java.util.logging.Logger.getLogger(Authenticator.class.getName());
         this.authRestUtil = new RestUtil(
                 config.getMosip_auth_server().getIda_auth_url(),
                 config.getMosip_auth().getAuthorization_header_constant(),
-                this.logger
+                this.julLogger
         );
         this.cryptoUtil = new CryptoUtil(
                 config.getCrypto_encrypt(),
@@ -105,12 +111,17 @@ public class Authenticator {
 
         logger.debug("Posting to " + pathParams);
 
-        return authRestUtil.postRequest(
+        HttpURLConnection connection = authRestUtil.postRequest(
                 pathParams,
                 signatureHeader,
-                fullRequestJson.getBytes(StandardCharsets.UTF_8),
+                fullRequestJson,
                 null
         );
+
+        try (InputStream is = connection.getInputStream()) {
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.readValue(is, new TypeReference<Map<String, Object>>() {});
+        }
     }
 
     public Map<String, Object> auth(
@@ -201,9 +212,10 @@ public class Authenticator {
                 ? DateTimeFormatter.ofPattern(timestampFormat).withZone(ZoneOffset.UTC).format(Instant.now())
                 : timestamp;
 
-        String transactionId = (txnId == null || txnId.isEmpty())
-                ? UUID.randomUUID().toString()
-                : txnId;
+//        String transactionId = (txnId == null || txnId.isEmpty())
+//                ? UUID.randomUUID().toString()
+//                : txnId;
+        String transactionId = String.valueOf(1234567890);
 
         String id = idaAuthRequestIdByController.get(controller);
         if (id == null || id.isEmpty()) {
@@ -297,13 +309,24 @@ public class Authenticator {
             throw exp;
         }
 
-        Map<String, Object> response = authRestUtil.postRequest(
+        HttpURLConnection connection = authRestUtil.postRequest(
                 pathParams,
                 signatureHeader,
-                fullRequestJson.getBytes(StandardCharsets.UTF_8),
+                fullRequestJson,
                 null
         );
-
+        Map<String, Object> response;
+        try (InputStream is = connection.getInputStream()) {
+            ObjectMapper mapper = new ObjectMapper();
+            response = mapper.readValue(is, new TypeReference<Map<String, Object>>() {});
+        } catch (IOException e) {
+            InputStream es = connection.getErrorStream();
+            if (es != null) {
+                String errorResponse = new String(es.readAllBytes(), StandardCharsets.UTF_8);
+                System.err.println("Server error response: " + errorResponse);
+            }
+            throw e;
+        }
         logger.info("Auth Request for Demographic Completed.");
         return response;
     }

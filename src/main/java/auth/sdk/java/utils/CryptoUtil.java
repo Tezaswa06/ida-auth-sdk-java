@@ -254,7 +254,7 @@ public class CryptoUtil {
 
             // Encrypt the auth data using the AES key
             byte[] encryptedAuthData = symmetricEncrypt(authData, aesKey);
-            String encryptedAuthB64Data = Base64.encodeBase64URLSafeString(encryptedAuthData);
+            String encryptedAuthB64Data = Base64.encodeBase64String(encryptedAuthData);
             logger.info("Generating AES Key and encrypting Auth Data Completed.");
 
             // Encrypt the AES key using the partner's public key
@@ -266,7 +266,7 @@ public class CryptoUtil {
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
             byte[] authDataHash = sha256.digest(authData);
             byte[] encAuthDataHash = symmetricEncrypt(authDataHash, aesKey);
-            String encAuthDataHashB64 = Base64.encodeBase64URLSafeString(encAuthDataHash);
+            String encAuthDataHashB64 = Base64.encodeBase64String(encAuthDataHash);
             logger.info("Generation of SHA256 Hash for the Auth Data completed.");
 
             return new String[] { encryptedAuthB64Data, encryptedAesKeyB64, encAuthDataHashB64 };
