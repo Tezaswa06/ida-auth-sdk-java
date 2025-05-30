@@ -57,9 +57,6 @@ public class CryptoUtil {
                 this.logger
         );
         this.decryptPrivateKey = (RSAPrivateKey) decryptKeyStoreData[0];
-        // Keep: Print hash of decryptPrivateKey to verify loading
-        System.out.println("DEBUG_DECRYPT_PRIVATE_KEY_HASH: " + Base64.encodeBase64URLSafeString(
-                MessageDigest.getInstance("SHA-256").digest(decryptPrivateKey.getEncoded())));
 
         // Load signing private key and certificate
         Object[] signKeyStoreData = getPrivateKeyAndCertificate(
@@ -69,9 +66,6 @@ public class CryptoUtil {
         );
         this.signPrivateKey = (RSAPrivateKey) signKeyStoreData[0];
         this.signCert = (X509Certificate) signKeyStoreData[1];
-        // Keep: Print hash of signPrivateKey to verify loading
-        System.out.println("DEBUG_SIGN_PRIVATE_KEY_HASH: " + Base64.encodeBase64URLSafeString(
-                MessageDigest.getInstance("SHA-256").digest(signPrivateKey.getEncoded())));
 
         // Initialize signPrivKeyJws
         this.signPrivKeyJws = CryptoUtil.getJwkPrivateKey(this.signPrivateKey, signConfig.getSign_p12_file_password(), this.logger);
@@ -106,11 +100,10 @@ public class CryptoUtil {
             String alias = keyStore.aliases().nextElement();
             PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, p12FilePassword.toCharArray());
             Certificate certificate = keyStore.getCertificate(alias);
-            // Keep: Print private key for debugging
-            System.out.println("DEBUG_PRIVATE_KEY_ENCODED: " + Base64.encodeBase64URLSafeString(privateKey.getEncoded()));
 
             return new Object[]{privateKey, certificate};
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             logger.error("Error Loading P12 file to create objects. Error: {}", e.getMessage(), e);
             throw new AuthenticatorCryptoException(
                     Errors.AUT_CRY_002.name(),
@@ -126,10 +119,10 @@ public class CryptoUtil {
             X509Certificate cert = (X509Certificate) certFactory.generateCertificate(fis);
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] encodedCert = digest.digest(cert.getEncoded());
-            // Keep: Print certificate thumbprint
-            System.out.println("DEBUG_CERTIFICATE_THUMBPRINT: " + Base64.encodeBase64URLSafeString(encodedCert));
+
             return Base64.encodeBase64URLSafeString(encodedCert);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             logger.error("Error calculating thumbprint for certificate: {}", certPath, e);
             throw new AuthenticatorCryptoException(
                     Errors.AUT_CRY_001.name(),
@@ -181,15 +174,12 @@ public class CryptoUtil {
 
         GCMParameterSpec gcmParameterSpec = new GCMParameterSpec(128, iv);
         cipher.init(Cipher.ENCRYPT_MODE, spec, gcmParameterSpec);
-        System.out.println("Encryption using java util IV: " + java.util.Base64.getEncoder().encodeToString(iv));
 
         byte[] encryptedData = cipher.doFinal(data);
 
-        // Concatenate encryptedData + iv
         byte[] output = new byte[encryptedData.length + iv.length];
         System.arraycopy(encryptedData, 0, output, 0, encryptedData.length);
         System.arraycopy(iv, 0, output, encryptedData.length, iv.length);
-        System.out.println("Encryption using java util IV: " + java.util.Base64.getEncoder().encodeToString(iv));
         return output;
     }
 
@@ -219,16 +209,13 @@ public class CryptoUtil {
             byte[] encryptedIdentity = Base64.decodeBase64(encryptedIdentityB64Padded);
 
             byte[] symKey = asymmetricDecrypt(sessionKey);
-            // Keep: Print decrypted session key
-            System.out.println("DEBUG_DECRYPTED_SESSION_KEY: " + Base64.encodeBase64URLSafeString(symKey));
 
             byte[] identity = symmetricDecrypt(encryptedIdentity, symKey, null);
-            // Keep: Print decrypted identity data
-            System.out.println("DEBUG_DECRYPTED_IDENTITY_DATA: " + new String(identity, StandardCharsets.UTF_8));
 
             ObjectMapper objectMapper = new ObjectMapper();
             return objectMapper.readValue(identity, Map.class);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             logger.error("Error decrypting Auth Data. Error Message: {}", e.getMessage(), e);
             throw new AuthenticatorCryptoException(Errors.AUT_CRY_003.name(), Errors.AUT_CRY_003.getMessage());
         }
@@ -241,36 +228,24 @@ public class CryptoUtil {
         }
 
         try {
-            // Keep: Print public key and thumbprint
-            //System.out.println("public key: " + Base64.encodeBase64URLSafeString(encryptPublicKey.getEncoded()));
-            //System.out.println("thumbprint: " + encCertThumbprint);
-
-            // Keep: Print raw auth data
-            //System.out.println("AUTH_DATA: " + new String(authData, StandardCharsets.UTF_8));
-
             byte[] aesKey = new byte[symmetricKeySize / 8];
             SecureRandom secureRandom = new SecureRandom();
             secureRandom.nextBytes(aesKey);
-            // Keep: Print session key
-            System.out.println("SESSION_KEY using java util: " + java.util.Base64.getEncoder().encodeToString(aesKey));
 
             byte[] encryptedAuthData = symmetricEncrypt(authData, aesKey, null);
             String encryptedAuthB64Data = Base64.encodeBase64URLSafeString(encryptedAuthData);
             logger.info("Generating AES Key and encrypting Auth Data Completed.");
-            //System.out.println("ENCRYPTED_AUTH_DATA: " + encryptedAuthB64Data);
-            System.out.println("encryptedAuthB64Data using java util: " + java.util.Base64.getEncoder().encodeToString(encryptedAuthData));
 
             byte[] encryptedAesKey = asymmetricEncrypt(aesKey);
             String encryptedAesKeyB64 = Base64.encodeBase64URLSafeString(encryptedAesKey);
             logger.info("Encrypting Random AES Key Completed.");
-            System.out.println("ENCRYPTED_AES_KEY: " + java.util.Base64.getEncoder().encodeToString(encryptedAesKey));
 
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
             byte[] authDataHash = sha256.digest(authData);
             String hexStr = Hex.encodeHexString(authDataHash).toUpperCase();
+
             byte[] encryptedHashData = symmetricEncrypt(hexStr.getBytes(), aesKey, null);
             String encAuthDataHashB64 = Base64.encodeBase64URLSafeString(encryptedHashData);
-            System.out.println("ENC_AUTH_DATA_HASH: " + encAuthDataHashB64);
 
             logger.info("Generation of SHA256 Hash for the Auth Data completed.");
             return new String[]{encryptedAuthB64Data, encryptedAesKeyB64, encAuthDataHashB64};
@@ -287,11 +262,6 @@ public class CryptoUtil {
                     .x509CertChain(Collections.singletonList(Base64URL.encode(signCert.getEncoded())))
                     .keyID(Base64.encodeBase64URLSafeString(signCert.getEncoded()))
                     .build();
-            // Keep: Print header
-            System.out.println("JWS_HEADER: " + header.toString());
-
-            // Keep: Print JWS payload
-            System.out.println("JWS_PAYLOAD: " + authRequestData);
 
             JWSObject jwsObject = new JWSObject(header, new Payload(authRequestData));
             JWSSigner signer = new RSASSASigner(signPrivateKey);

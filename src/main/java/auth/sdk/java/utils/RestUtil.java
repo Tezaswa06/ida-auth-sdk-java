@@ -84,10 +84,6 @@ public class RestUtil {
             connection.setRequestProperty(entry.getKey(), entry.getValue());
         }
 
-        System.out.println("POST URL: " + url);
-        System.out.println("Payload: " + data);
-        System.out.println("Headers: " + connection.getRequestProperties());
-
         // Add cookies
         if (cookies != null && !cookies.isEmpty()) {
             StringBuilder cookieBuilder = new StringBuilder();

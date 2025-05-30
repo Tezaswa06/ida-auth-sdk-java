@@ -20,19 +20,19 @@ public class DemoAuth {
             demographicsData.setDob("1992/04/15");
             demographicsData.setEmailId("ESignet_AddIdentity_BioAuth_smoke_Pos@mosip.net");
 
-// Set name
+        // Set name
             IdentityInfo nameInfo = new IdentityInfo();
             nameInfo.setLanguage("eng");
             nameInfo.setValue("TEST_FULLNAMEeng");
             demographicsData.getName().add(nameInfo);
 
-// Set gender
+            // Set gender
             IdentityInfo genderInfo = new IdentityInfo();
             genderInfo.setLanguage("eng");
             genderInfo.setValue("MLEeng");
             demographicsData.getGender().add(genderInfo);
 
-// Set full address
+              // Set full address
 //            IdentityInfo addressInfo = new IdentityInfo();
 //            addressInfo.setLanguage("eng");
 //            addressInfo.setValue("TEST_ADDRESSLINE1eng, TEST_ADDRESSLINE2eng, TEST_ADDRESSLINE3eng");
