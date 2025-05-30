@@ -32,14 +32,12 @@ public class RestUtil {
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
 
-        // Add headers
         if (headers != null) {
             for (Map.Entry<String, String> entry : headers.entrySet()) {
                 connection.setRequestProperty(entry.getKey(), entry.getValue());
             }
         }
 
-        // Add cookies
         if (cookies != null && !cookies.isEmpty()) {
             StringBuilder cookieBuilder = new StringBuilder();
             for (Map.Entry<String, String> entry : cookies.entrySet()) {
@@ -48,7 +46,6 @@ public class RestUtil {
             connection.setRequestProperty("Cookie", cookieBuilder.toString());
         }
 
-        // Send data if provided (Note: uncommon for GET)
         if (data != null) {
             connection.setDoOutput(true);
             try (OutputStream os = connection.getOutputStream()) {
@@ -100,14 +97,12 @@ public class RestUtil {
             connection.setRequestProperty("Cookie", cookieBuilder.toString());
         }
 
-        // Add data (payload)
         if (data != null) {
             try (OutputStream os = connection.getOutputStream()) {
                 os.write(data.getBytes());
                 os.flush();
             }
         }
-
         return connection;
     }
 }

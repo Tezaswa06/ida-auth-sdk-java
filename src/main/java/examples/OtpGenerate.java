@@ -17,8 +17,8 @@ public class OtpGenerate {
 
             // Perform OTP generation
             Map<String, Object> response = authenticator.genOtp(
-                    "4370296312658178", // individual_id
-                    "VID",              // individual_id_type
+                    "8536475201", // individual_id
+                    "UIN",              // individual_id_type
                     "1234567890",       // txnId
                     true,               // email
                     true                // phone

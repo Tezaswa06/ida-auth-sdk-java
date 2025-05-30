@@ -1,0 +1,92 @@
+<configuration>
+    <!-- Console Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- Updated pattern to include thread -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] - %logger{36} - %-5level - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File Appender for All Logs -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>authenticator.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- Roll over daily (in IST) and when file size exceeds 10MB -->
+            <fileNamePattern>authenticator-%d{yyyy-MM-dd,Asia/Kolkata}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>300MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] - %logger{36} - %-5level - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File Appender for Authenticator Logs -->
+    <appender name="AUTHENTICATOR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>authenticator-auth.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>authenticator-auth-%d{yyyy-MM-dd,Asia/Kolkata}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>300MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] - %logger{36} - %-5level - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File Appender for Utils Logs (CryptoUtil, RestUtil) -->
+    <appender name="UTILS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>authenticator-utils.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>authenticator-utils-%d{yyyy-MM-dd,Asia/Kolkata}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>300MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] - %logger{36} - %-5level - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File Appender for Error Logs -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>authenticator-errors.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>authenticator-errors-%d{yyyy-MM-dd,Asia/Kolkata}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>300MB</totalSizeCap>
+        </rollingPolicy>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] - %logger{36} - %-5level - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Logger for auth.sdk.java.authenticator (Authenticator.java) -->
+    <logger name="auth.sdk.java.authenticator" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="AUTHENTICATOR_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+
+    <!-- Logger for auth.sdk.java.utils (CryptoUtil.java, RestUtil.java) -->
+    <logger name="auth.sdk.java.utils" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="UTILS_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+
+    <!-- Root Logger -->
+    <root level="DEBUG">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </root>
+</configuration>
